@@ -3,6 +3,9 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const app = express();
 const port = 3001;
+const jwt = require('jsonwebtoken');
+
+
 app.use(cors())
 app.use(express.json())
 // Connect to MongoDB (replace 'your-mongodb-uri' with your actual MongoDB URI)
@@ -20,6 +23,12 @@ const productSchema = new mongoose.Schema({
     id: Number,
 });
 
+// Define Product Schema
+const userSchema = new mongoose.Schema({
+    username: String,
+    password: String
+});
+
 // Define Order Schema
 const orderSchema = new mongoose.Schema({
     products: [productSchema],
@@ -30,9 +39,70 @@ const orderSchema = new mongoose.Schema({
 // Create Product and Order Models
 const Product = mongoose.model('Product', productSchema);
 const Order = mongoose.model('Order', orderSchema);
+const User = mongoose.model('User', userSchema);
 
 // Use Body Parser Middleware
 app.use(express.json());
+
+
+app.post('/users/new', async (req, res) => {
+    try {
+        const user = new User(req.body)
+        await user.save()
+        res.status(201)
+    } catch (error) {
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+app.post('/users/login', async (req, res) => {
+    try {
+        const user = await User.findOne({username:req.body.username, password:req.body.password});
+        if (user){
+            const token = jwt.sign({username: user.username, password:user.password}, 'banana');
+            res.json({token});
+            res.status(200)
+        }else {
+            res.status(403).json({ error: 'User not found!' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+app.post('/users/token-validate', async (req, res) => {
+    try {
+        
+        const token = req.body.token
+        var decoded = jwt.verify(token, 'banana');
+        console.log(decoded)
+        res.send("Token Valid!")
+        res.status(200)
+    } catch (error) {
+        res.status(401).json({ error: 'Invalid token' });
+    }
+});
+
+app.post('/users/user-validate', async (req, res) => {
+    try {
+        
+        const token = req.body.token
+        var decoded = jwt.verify(token, 'banana');
+       
+        const user = await User.findOne({username:decoded.username, password:decoded.password});
+        if (user){
+            res.send("User found!")
+            res.status(200)
+        }else {
+            res.status(403).json({ error: 'User not found!' });
+        }
+       
+    } catch (error) {
+        res.status(401).json({ error: 'Invalid token' });
+    }
+});
+
+
 
 // Define a GET endpoint for /products
 app.get('/products', async (req, res) => {

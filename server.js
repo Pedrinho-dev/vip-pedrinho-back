@@ -23,7 +23,7 @@ const productSchema = new mongoose.Schema({
     id: Number,
 });
 
-// Define Product Schema
+// Define User Schema
 const userSchema = new mongoose.Schema({
     username: String,
     password: String
@@ -43,13 +43,31 @@ const User = mongoose.model('User', userSchema);
 
 // Use Body Parser Middleware
 app.use(express.json());
+const jwtSecret = "xyz"
 
+const authMiddleware = function (req, res, next){
+    let token = req.headers.authorization;
 
-app.post('/users/new', async (req, res) => {
+    if(token){
+        try {
+            token =  token.split(' ')[1]
+
+            jwt.verify(token,jwtSecret);
+            next()
+        }catch(error){
+            res.status(401).json({error:"Invalid Token"});
+        }
+     } else  {  
+        res.status(401).json({error:"Token not found"});
+     }
+
+}
+
+app.post('/users/new',authMiddleware,   async (req, res) => {
     try {
         const user = new User(req.body)
         await user.save()
-        res.status(201)
+        res.status(201).json({ error: 'User sucessfully saved ' });
     } catch (error) {
         res.status(500).json({ error: 'Internal Server Error' });
     }
@@ -59,7 +77,7 @@ app.post('/users/login', async (req, res) => {
     try {
         const user = await User.findOne({username:req.body.username, password:req.body.password});
         if (user){
-            const token = jwt.sign({username: user.username, password:user.password}, 'banana');
+            const token = jwt.sign({username: user.username}, jwtSecret);
             res.json({token});
             res.status(200)
         }else {
@@ -74,7 +92,7 @@ app.post('/users/token-validate', async (req, res) => {
     try {
         
         const token = req.body.token
-        var decoded = jwt.verify(token, 'banana');
+        var decoded = jwt.verify(token, jwtSecret);
         console.log(decoded)
         res.send("Token Valid!")
         res.status(200)
@@ -87,9 +105,9 @@ app.post('/users/user-validate', async (req, res) => {
     try {
         
         const token = req.body.token
-        var decoded = jwt.verify(token, 'banana');
+        var decoded = jwt.verify(token, jwtSecret);
        
-        const user = await User.findOne({username:decoded.username, password:decoded.password});
+        const user = await User.findOne({username:decoded.username});
         if (user){
             res.send("User found!")
             res.status(200)

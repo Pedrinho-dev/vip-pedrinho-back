@@ -32,6 +32,7 @@ const userSchema = new mongoose.Schema({
 // Define Order Schema
 const orderSchema = new mongoose.Schema({
     products: [productSchema],
+    user: { type: mongoose.Types.ObjectId, ref: "User" },
     total: Number,
     createAt: String,
 });
@@ -45,25 +46,26 @@ const User = mongoose.model('User', userSchema);
 app.use(express.json());
 const jwtSecret = "xyz"
 
-const authMiddleware = function (req, res, next){
+const authMiddleware = function (req, res, next) {
     let token = req.headers.authorization;
 
-    if(token){
+    if (token) {
         try {
-            token =  token.split(' ')[1]
+            token = token.split(' ')[1]
 
-            jwt.verify(token,jwtSecret);
+            const decodedUser = jwt.verify(token, jwtSecret);
+            req.userId = decodedUser.id
             next()
-        }catch(error){
-            res.status(401).json({error:"Invalid Token"});
+        } catch (error) {
+            res.status(401).json({ error: "Invalid Token" });
         }
-     } else  {  
-        res.status(401).json({error:"Token not found"});
-     }
+    } else {
+        res.status(401).json({ error: "Token not found" });
+    }
 
 }
 
-app.post('/users/new',authMiddleware,   async (req, res) => {
+app.post('/users/new', authMiddleware, async (req, res) => {
     try {
         const user = new User(req.body)
         await user.save()
@@ -75,12 +77,12 @@ app.post('/users/new',authMiddleware,   async (req, res) => {
 
 app.post('/users/login', async (req, res) => {
     try {
-        const user = await User.findOne({username:req.body.username, password:req.body.password});
-        if (user){
-            const token = jwt.sign({username: user.username}, jwtSecret);
-            res.json({token});
+        const user = await User.findOne({ username: req.body.username, password: req.body.password });
+        if (user) {
+            const token = jwt.sign({ id: user.id, username: user.username }, jwtSecret);
+            res.json({ token });
             res.status(200)
-        }else {
+        } else {
             res.status(403).json({ error: 'User not found!' });
         }
     } catch (error) {
@@ -90,7 +92,7 @@ app.post('/users/login', async (req, res) => {
 
 app.post('/users/token-validate', async (req, res) => {
     try {
-        
+
         const token = req.body.token
         var decoded = jwt.verify(token, jwtSecret);
         console.log(decoded)
@@ -103,18 +105,18 @@ app.post('/users/token-validate', async (req, res) => {
 
 app.post('/users/user-validate', async (req, res) => {
     try {
-        
+
         const token = req.body.token
         var decoded = jwt.verify(token, jwtSecret);
-       
-        const user = await User.findOne({username:decoded.username});
-        if (user){
+
+        const user = await User.findOne({ username: decoded.username });
+        if (user) {
             res.send("User found!")
             res.status(200)
-        }else {
+        } else {
             res.status(403).json({ error: 'User not found!' });
         }
-       
+
     } catch (error) {
         res.status(401).json({ error: 'Invalid token' });
     }
@@ -133,18 +135,22 @@ app.get('/products', async (req, res) => {
 });
 
 // Define a GET endpoint for /orders
-app.get('/orders', async (req, res) => {
+app.get('/orders', authMiddleware, async (req, res) => {
     try {
-        const orders = await Order.find();
+        const orders = await Order.find({ user: req.userId });
         res.json(orders);
     } catch (error) {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
 
-app.post('/orders', async (req, res) => {
+app.post('/orders', authMiddleware, async (req, res) => {
     try {
+
+        const userId = req.userId
         const order = new Order(req.body.order)
+        order.user = userId //vincular o id ao order
+
         await order.save()
         res.status(201)
     } catch (error) {
